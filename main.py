@@ -113,7 +113,7 @@ if st.button("Prediksi"):
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(stem_text)
         
         # Membuat dan melatih tfidf vectorizer dari data X_train
-        tfidf = TfidfVectorizer(max_features=40530)  # Atur max_features sesuai kebutuhan
+        tfidf = TfidfVectorizer(max_features=4)  # Atur max_features sesuai kebutuhan
         X_train_tfidf = tfidf.fit_transform(X_train['Combined_Text']).toarray()
 
         # Transformasi deskripsi buku menggunakan TfidfVectorizer yang dimuat
