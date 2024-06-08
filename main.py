@@ -1,35 +1,30 @@
 import streamlit as st
 import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer
-from googledriver import download
-from sklearn.svm import SVC
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.svm import SVC
+import requests
 from io import BytesIO
 from PIL import Image
 import base64
-import requests
-import gzip 
 
-def download_from_gdrive(id, destination):
-        URL = "https://docs.google.com/uc?export=download"
+def download_from_gdrive(file_id, destination):
+    URL = "https://docs.google.com/uc?export=download"
 
-        session = requests.Session()
+    session = requests.Session()
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    token = get_confirm_token(response)
 
-        response = session.get(URL, params = { 'id' : id }, stream = True)
-        token = get_confirm_token(response)
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
 
-        if token:
-            params = { 'id' : id, 'confirm' : token }
-            response = session.get(URL, params = params, stream = True)
-
-            save_response_content(response, destination)    
-            return destination
+    save_response_content(response, destination)
 
 def get_confirm_token(response):
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
             return value
-
     return None
 
 def save_response_content(response, destination):
@@ -37,15 +32,12 @@ def save_response_content(response, destination):
 
     with open(destination, "wb") as f:
         for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk: # filter out keep-alive new chunks
+            if chunk:
                 f.write(chunk)
 
 def load_pickle(filename):
     with open(filename, 'rb') as file:
         return pickle.load(file)
-
-
-
 
 # Fungsi untuk memuat gambar sebagai base64
 def load_image_as_base64(image_path):
@@ -137,14 +129,10 @@ if st.button("Prediksi"):
         svm_model_id = '1pp3tYIZ1SqMZJaDScp_1_wd4RMflYWDM'
         tfidf_vectorizer_id = '1k2-CqUWPEZEUbgF1tHG64EWswNNkce15'
         
-      
         svm_model_path = download_from_gdrive(svm_model_id, 'svm_model.pkl')
         tfidf_vectorizer_path = download_from_gdrive(tfidf_vectorizer_id, 'tfidf_vectorizer.pkl')
         
-     
         loaded_model = load_pickle(svm_model_path)
-        
-       
         tfidf_vectorizer = load_pickle(tfidf_vectorizer_path)
         
         # Preprocessing deskripsi buku
@@ -160,7 +148,7 @@ if st.button("Prediksi"):
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(stem_text)
         
         # Membuat dan melatih tfidf vectorizer dari data X_train
-        tfidf = TfidfVectorizer(max_features=5000)  # Atur max_features sesuai kebutuhan
+        tfidf = TfidfVectorizer(max_features=40530)  # Atur max_features sesuai kebutuhan
         X_train_tfidf = tfidf.fit_transform(X_train['Combined_Text']).toarray()
 
         # Transformasi deskripsi buku menggunakan TfidfVectorizer yang dimuat
