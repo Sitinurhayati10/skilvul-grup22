@@ -1,11 +1,51 @@
 import streamlit as st
 import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
+from googledriver import download
 from sklearn.svm import SVC
 import pandas as pd
 from io import BytesIO
 from PIL import Image
 import base64
+import requests
+import gzip 
+
+def download_from_gdrive(id, destination):
+        URL = "https://docs.google.com/uc?export=download"
+
+        session = requests.Session()
+
+        response = session.get(URL, params = { 'id' : id }, stream = True)
+        token = get_confirm_token(response)
+
+        if token:
+            params = { 'id' : id, 'confirm' : token }
+            response = session.get(URL, params = params, stream = True)
+
+            save_response_content(response, destination)    
+            return destination
+
+def get_confirm_token(response):
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            return value
+
+    return None
+
+def save_response_content(response, destination):
+    CHUNK_SIZE = 32768
+
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            if chunk: # filter out keep-alive new chunks
+                f.write(chunk)
+
+def load_pickle(filename):
+    with open(filename, 'rb') as file:
+        return pickle.load(file)
+
+
+
 
 # Fungsi untuk memuat gambar sebagai base64
 def load_image_as_base64(image_path):
@@ -94,17 +134,24 @@ if st.button("Prediksi"):
         st.info("Sedang melakukan prediksi...")
 
         # Load model SVM dan vectorizer
-        with open("C:\\Skilvul Grup 22 Education\\bookgenie-genreprediction\\svm_model (1).pkl", 'rb') as file:
-            loaded_model = pickle.load(file)
+        svm_model_id = '1pp3tYIZ1SqMZJaDScp_1_wd4RMflYWDM'
+        tfidf_vectorizer_id = '1k2-CqUWPEZEUbgF1tHG64EWswNNkce15'
         
-        with open("C:\\Skilvul Grup 22 Education\\bookgenie-genreprediction\\tfidf_vectorizer.pkl", 'rb') as file:
-            tfidf = pickle.load(file)
+      
+        svm_model_path = download_from_gdrive(svm_model_id, 'svm_model.pkl')
+        tfidf_vectorizer_path = download_from_gdrive(tfidf_vectorizer_id, 'tfidf_vectorizer.pkl')
+        
+     
+        loaded_model = load_pickle(svm_model_path)
+        
+       
+        tfidf_vectorizer = load_pickle(tfidf_vectorizer_path)
         
         # Preprocessing deskripsi buku
         book_description_processed = [stem_text(remove_sw(removepunc(lowercase(book_description))))]
 
         # Membaca data X_train
-        X_train = pd.read_csv("C:\\Skilvul Grup 22 Education\\bookgenie-genreprediction\\X_train_tfidf.csv")  # Ubah sesuai dengan lokasi yang benar
+        X_train = pd.read_csv("./X_train_tfidf.csv")  # Ubah sesuai dengan lokasi yang benar
         
         # Menerapkan pemrosesan teks pada data X_train
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(lowercase)
@@ -113,7 +160,7 @@ if st.button("Prediksi"):
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(stem_text)
         
         # Membuat dan melatih tfidf vectorizer dari data X_train
-        tfidf = TfidfVectorizer(max_features=5000)  # Atur max_features sesuai kebutuhan
+        tfidf = TfidfVectorizer(max_features=40530)  # Atur max_features sesuai kebutuhan
         X_train_tfidf = tfidf.fit_transform(X_train['Combined_Text']).toarray()
 
         # Transformasi deskripsi buku menggunakan TfidfVectorizer yang dimuat
