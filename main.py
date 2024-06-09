@@ -1,43 +1,11 @@
 import streamlit as st
 import pickle
-import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
+import pandas as pd
 from sklearn.svm import SVC
-import requests
-from io import BytesIO
 from PIL import Image
+from io import BytesIO
 import base64
-
-def download_from_gdrive(file_id, destination):
-    URL = "https://docs.google.com/uc?export=download"
-
-    session = requests.Session()
-    response = session.get(URL, params={'id': file_id}, stream=True)
-    token = get_confirm_token(response)
-
-    if token:
-        params = {'id': file_id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-
-    save_response_content(response, destination)
-
-def get_confirm_token(response):
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            return value
-    return None
-
-def save_response_content(response, destination):
-    CHUNK_SIZE = 32768
-
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:
-                f.write(chunk)
-
-def load_pickle(filename):
-    with open(filename, 'rb') as file:
-        return pickle.load(file)
 
 # Fungsi untuk memuat gambar sebagai base64
 def load_image_as_base64(image_path):
@@ -51,39 +19,52 @@ def lowercase(text):
     return text.lower()
 
 def removepunc(text):
-    return ''.join([char for char in text if char.isalnum() or char.isspace()])
+    import string
+    return text.translate(str.maketrans('', '', string.punctuation))
 
 def remove_sw(text):
-    stopwords = set(['the', 'and', 'is', 'in', 'to', 'with'])
-    return ' '.join([word for word in text.split() if word not in stopwords])
+    from nltk.corpus import stopwords
+    stop_words = set(stopwords.words('english'))
+    return ' '.join([word for word in text.split() if word not in stop_words])
 
 def stem_text(text):
-    # Implementasi stemming yang sesuai
-    return text  # Ganti dengan logika stemming yang sesuai
+    from nltk.stem.porter import PorterStemmer
+    porter = PorterStemmer()
+    return ' '.join([porter.stem(word) for word in text.split()])
 
-# Set the background colors and text color
+# Set the background colors, text color, and fonts
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+    
     body {
-        background-color: #d3d3d3; /* Light gray background */
+        background-color: #87CEEB; /* Sky blue background */
         margin: 0; /* Remove default margin for body */
         padding: 0; /* Remove default padding for body */
+        font-family: 'Poppins', sans-serif; /* Set global font to Poppins */
     }
     .st-bw {
-        background-color: #eeeeee; /* Light gray background for widgets */
+        background-color: #ffffff; /* White background for widgets */
+        border-radius: 10px; /* Add rounded corners */
+        padding: 20px; /* Add padding */
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add subtle shadow */
     }
     .st-cq {
-        background-color: #cccccc; /* Gray background for chat input */
+        background-color: #f7f7f7; /* Light gray background for input */
         border-radius: 10px; /* Add rounded corners */
         padding: 8px 12px; /* Add padding for input text */
         color: black; /* Set text color */
+        font-family: 'Poppins', sans-serif; /* Set font to Poppins */
     }
     .st-cx {
-        background-color: #d3d3d3; /* Light gray background for chat messages */
+        background-color: #f0f0f0; /* Light gray background for messages */
+        border-radius: 10px; /* Add rounded corners */
+        padding: 10px; /* Add padding */
+        font-family: 'Poppins', sans-serif; /* Set font to Poppins */
     }
     .sidebar .block-container {
-        background-color: #d3d3d3; /* Light gray background for sidebar */
+        background-color: #87CEEB; /* Sky blue background for sidebar */
         border-radius: 10px; /* Add rounded corners */
         padding: 10px; /* Add some padding for spacing */
     }
@@ -92,11 +73,26 @@ st.markdown(
         top: 30px;
         right: 0;
         padding: 20px;
-        background-color: #d3d3d3; /* Light gray background for image container */
+        background-color: #87CEEB; /* Sky blue background for image container */
         border-radius: 0 0 0 10px; /* Add rounded corners to bottom left */
     }
     .custom-font {
-        color: #888888; /* Set font color to gray */
+        color: #444444; /* Set font color to dark gray */
+        font-family: 'Poppins', sans-serif; /* Set font to Poppins */
+    }
+    .headline {
+        color: #444444; /* Set font color to dark gray */
+        font-family: 'Poppins', sans-serif; /* Set font to Poppins */
+        font-size: 24px;
+        font-weight: 300;
+        margin-top: 0;
+    }
+    .title {
+        color: #87CEEB; /* Light blue color for title */
+        font-family: 'Poppins', sans-serif; /* Set font to Poppins */
+        font-size: 32px;
+        font-weight: 600;
+        margin: 0;
     }
     </style>
     """,
@@ -110,48 +106,51 @@ st.markdown(
     f"""
     <div style='display: flex; align-items: center; gap: 15px;' class='custom-font'>
         <img src='data:image/png;base64,{logo_base64}' width='50'>
-        <h1 style='margin: 0;'>BookGenie</h1>
+        <h1 class='title'>BookGenie</h1>
     </div>
+    <p class='headline'>Predict the genre of any book with our AI technology!</p>
     """,
     unsafe_allow_html=True
 )
 
 # Kolom input teks untuk deskripsi buku
-book_description = st.text_area("Masukkan deskripsi buku:")
+st.markdown("### Enter book summary:")
+book_description = st.text_area("", height=200)
 
-if st.button("Prediksi"):
+if st.button("Predict"):
     if not book_description:
-        st.warning("Mohon isi deskripsi buku terlebih dahulu.")
+        st.warning("Please enter a book summary.")
     else:
-        st.info("Sedang melakukan prediksi...")
+        st.info("Predicting...")
 
         # Load model SVM dan vectorizer
-        svm_model_id = '1pp3tYIZ1SqMZJaDScp_1_wd4RMflYWDM'
-        tfidf_vectorizer_id = '1k2-CqUWPEZEUbgF1tHG64EWswNNkce15'
+        with open("C:\\Skilvul Grup 22 Education\\bookgenie-genreprediction\\svm_model (2).pkl", 'rb') as file:
+            loaded_model = pickle.load(file)
         
-        svm_model_path = download_from_gdrive(svm_model_id, 'svm_model.pkl')
-        tfidf_vectorizer_path = download_from_gdrive(tfidf_vectorizer_id, 'tfidf_vectorizer.pkl')
+        with open("C:\\Skilvul Grup 22 Education\\bookgenie-genreprediction\\tfidf_vectorizer.pkl", 'rb') as file:
+            tfidf = pickle.load(file)
         
-        loaded_model = load_pickle(svm_model_path)
-        tfidf_vectorizer = load_pickle(tfidf_vectorizer_path)
+        # Memuat LabelEncoder
+        with open("label_encoder.pkl", 'rb') as encoder_file:
+            loaded_encoder = pickle.load(encoder_file)
         
-        # Preprocessing deskripsi buku
-        book_description_processed = [stem_text(remove_sw(removepunc(lowercase(book_description))))]
-
         # Membaca data X_train
-        X_train = pd.read_csv("./X_train_tfidf.csv")  # Ubah sesuai dengan lokasi yang benar
-        
+        X_train = pd.read_csv("C:\\Skilvul Grup 22 Education\\bookgenie-genreprediction\\X_train.csv")  # Ubah sesuai dengan lokasi yang benar
+
         # Menerapkan pemrosesan teks pada data X_train
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(lowercase)
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(removepunc)
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(remove_sw)
         X_train['Combined_Text'] = X_train['Combined_Text'].apply(stem_text)
-        
-        # Membuat dan melatih tfidf vectorizer dari data X_train
-        tfidf = TfidfVectorizer(max_features=40530)  # Atur max_features sesuai kebutuhan
-        X_train_tfidf = tfidf.fit_transform(X_train['Combined_Text']).toarray()
 
-        # Transformasi deskripsi buku menggunakan TfidfVectorizer yang dimuat
+        # Membuat dan melatih tfidf vectorizer dari data X_train
+        tfidf = TfidfVectorizer(max_features=5000)  # Atur max_features sesuai kebutuhan
+        X_train_tfidf = tfidf.fit_transform(X_train['Combined_Text']).toarray()
+        
+        # Preprocessing deskripsi buku
+        book_description_processed = [stem_text(remove_sw(removepunc(lowercase(book_description))))]
+
+        # Transformasi deskripsi buku menggunakan TfidfVectorizer yang sama
         book_description_tfidf = tfidf.transform(book_description_processed).toarray()
 
         # Prediksi genre buku
@@ -170,6 +169,6 @@ if st.button("Prediksi"):
         predicted_genre = genre_mapping[predictions[0]]
 
         # Tampilkan hasil prediksi
-        st.write("Hasil Prediksi:")
+        st.write("Prediction Results:")
         st.title(predicted_genre)
-        st.success("Prediksi selesai!")
+        st.success("Prediction completed.")
